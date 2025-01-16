@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { loginAsAdmin } from '../lib/firebase';
+import { Trophy } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -8,77 +10,73 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await loginAsAdmin(email, password);
-      navigate('/');
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate('/dashboard');
     } catch (err) {
       setError('Invalid email or password');
-      console.error('Login error:', err);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="text-center text-3xl font-extrabold bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent">
-          Sports Event Management
-        </h2>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-700">
-          <form className="space-y-6" onSubmit={handleLogin}>
-            {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded">
-                {error}
-              </div>
-            )}
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+      <div className="max-w-md w-full space-y-8 bg-gray-800 p-8 rounded-xl shadow-lg">
+        <div className="text-center">
+          <div className="flex justify-center">
+            <Trophy className="h-12 w-12 text-orange-500" />
+          </div>
+          <h2 className="mt-6 text-3xl font-bold text-white">Sports Event Manager</h2>
+          <p className="mt-2 text-sm text-gray-400">Sign in to manage hostel sports events</p>
+        </div>
+        
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-900/50 text-red-200 p-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+          
+          <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="email" className="text-sm font-medium text-gray-300">
                 Email address
               </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 block w-full rounded-lg bg-gray-700 border-transparent focus:border-orange-500 focus:ring-orange-500 text-white"
+                placeholder="admin@example.com"
+              />
             </div>
-
+            
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="password" className="text-sm font-medium text-gray-300">
                 Password
               </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1 block w-full rounded-lg bg-gray-700 border-transparent focus:border-orange-500 focus:ring-orange-500 text-white"
+                placeholder="••••••••"
+              />
             </div>
+          </div>
 
-            <div>
-              <button
-                type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Sign in
-              </button>
-            </div>
-          </form>
-        </div>
+          <button
+            type="submit"
+            className="w-full flex justify-center py-3 px-4 rounded-lg text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 focus:ring-offset-gray-800"
+          >
+            Sign in
+          </button>
+        </form>
       </div>
     </div>
   );

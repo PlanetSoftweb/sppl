@@ -2,18 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
-
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: #111827;
-  color: #ffffff;
+  @apply bg-gray-900;
 }
 
-#root {
-  min-height: 100vh;
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-orange-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-orange-700;
 }

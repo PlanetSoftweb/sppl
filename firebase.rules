@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /hostels/{hostelId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+        request.resource.data.password.size() >= 6;
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+    
+    match /teams/{teamId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+        exists(/databases/$(database)/documents/hostels/$(request.resource.data.hostel_id));
+      // Allow updates by the team owner
+      allow update: if isSignedIn() && 
+        (isOwner(resource.data.userId) || isOwner(request.resource.data.userId));
+      allow delete: if isOwner(resource.data.userId);
+    }
+    
+    match /players/{playerId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+        exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId));
+      allow update: if isSignedIn() && 
+        (isOwner(resource.data.userId) || isOwner(request.resource.data.userId));
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /registrationLinks/{linkId} {
+      allow read: if true; // Allow public read for registration links
+      allow create: if isSignedIn() && 
+        exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId));
+      allow update: if isOwner(resource.data.userId);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /playerRequests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if true; // Allow public creation for player registration
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+  }
+}

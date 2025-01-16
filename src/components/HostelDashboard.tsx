@@ -1,427 +1,384 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import type { Team, Volunteer, Revenue, Hostel, Player } from '../types/database.types';
-import PlayerManagementModal from './PlayerManagementModal';
+import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+import type { Hostel, SportTeam } from '../types';
+import { Lock, Users, Trophy, Plus, Edit, Medal, Activity, Download } from 'lucide-react';
+import AddTeam from './AddTeam';
+import TeamView from './TeamView';
+import * as XLSX from 'xlsx';
 
 export default function HostelDashboard() {
   const { hostelId } = useParams();
-  const navigate = useNavigate();
   const [hostel, setHostel] = useState<Hostel | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
-  const [revenues, setRevenues] = useState<Revenue[]>([]);
-  const [activeTab, setActiveTab] = useState('teams');
+  const [teams, setTeams] = useState<SportTeam[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [isVerified, setIsVerified] = useState(false);
-  const [verificationPassword, setVerificationPassword] = useState('');
-  const [formData, setFormData] = useState({
-    sport: 'VOLLEYBALL',
-    captain_name: '',
-    team_size: '',
-    hostel_password: ''
-  });
+  const [loading, setLoading] = useState(true);
+  const [showAddTeam, setShowAddTeam] = useState<'cricket' | 'volleyball' | 'kabaddi' | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<SportTeam | null>(null);
 
   useEffect(() => {
+    const fetchData = async () => {
+      if (!hostelId) return;
+      
+      try {
+        // Fetch hostel data
+        const hostelRef = doc(db, 'hostels', hostelId);
+        const hostelSnap = await getDoc(hostelRef);
+        
+        if (hostelSnap.exists()) {
+          const hostelData = { id: hostelSnap.id, ...hostelSnap.data() } as Hostel;
+          setHostel(hostelData);
+          
+          // Fetch teams for this hostel
+          const teamsQuery = query(
+            collection(db, 'teams'),
+            where('hostel_id', '==', hostelId)
+          );
+          const teamsSnap = await getDocs(teamsQuery);
+          const teamsData = teamsSnap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            hostelId // Add hostelId to each team
+          })) as SportTeam[];
+          
+          setTeams(teamsData);
+        }
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load hostel data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [hostelId]);
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (hostel && password === hostel.password) {
+      setIsAuthenticated(true);
+      setError('');
+      localStorage.setItem(`hostel_auth_${hostelId}`, 'true');
+    } else {
+      setError('Incorrect password');
+    }
+  };
+
+  const handleTeamCreated = (newTeam: SportTeam) => {
+    setTeams(prevTeams => [...prevTeams, newTeam]);
+    setShowAddTeam(null);
+  };
+
+  const handleTeamUpdated = (updatedTeam: SportTeam) => {
+    setTeams(prevTeams => 
+      prevTeams.map(team => team.id === updatedTeam.id ? updatedTeam : team)
+    );
+    setSelectedTeam(null);
+  };
+
+  const exportTeamData = (team: SportTeam) => {
+    // Prepare player data for export
+    const playerData = team.players.map((player, index) => ({
+      'No.': index + 1,
+      'Name': player.name,
+      'Role': player.role,
+      'Jersey Number': player.jerseyNumber,
+      'Mobile Number': player.mobileNumber,
+      'T-shirt Size': player.tshirtSize
+    }));
+
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(playerData);
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Players');
+
+    // Generate Excel file
+    XLSX.writeFile(wb, `${hostel?.name}_${team.sport}_team.xlsx`);
+  };
+
+  // Check for saved authentication state on component mount
+  useEffect(() => {
     if (hostelId) {
-      fetchHostelData();
+      const isAuth = localStorage.getItem(`hostel_auth_${hostelId}`);
+      if (isAuth === 'true') {
+        setIsAuthenticated(true);
+      }
     }
   }, [hostelId]);
 
-  async function fetchHostelData() {
-    try {
-      const hostelDoc = await getDoc(doc(db, 'hostels', hostelId!));
-      if (hostelDoc.exists()) {
-        setHostel({ id: hostelDoc.id, ...hostelDoc.data() } as Hostel);
-      } else {
-        navigate('/hostels');
-      }
-    } catch (err) {
-      console.error('Error fetching hostel:', err);
-      navigate('/hostels');
-    }
-  }
-
-  const handleVerification = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (hostel?.password === verificationPassword) {
-      setIsVerified(true);
-      setError('');
-      fetchTeams();
-      fetchPlayers();
-      fetchVolunteers();
-      fetchRevenues();
-    } else {
-      setError('Invalid hostel password');
-    }
-  };
-
-  async function fetchTeams() {
-    try {
-      const q = query(collection(db, 'teams'), where('hostel_id', '==', hostelId));
-      const teamsSnapshot = await getDocs(q);
-      const teamsList = teamsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        name: `${doc.data().sport} Team`
-      } as Team));
-      setTeams(teamsList);
-    } catch (err) {
-      console.error('Error fetching teams:', err);
-    }
-  }
-
-  async function fetchPlayers() {
-    try {
-      const teamsQuery = query(collection(db, 'teams'), where('hostel_id', '==', hostelId));
-      const teamsSnapshot = await getDocs(teamsQuery);
-      const teamIds = teamsSnapshot.docs.map(doc => doc.id);
-      
-      const playersQuery = query(collection(db, 'players'), where('team_id', 'in', teamIds));
-      const playersSnapshot = await getDocs(playersQuery);
-      const playersList = playersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Player));
-      setPlayers(playersList);
-    } catch (err) {
-      console.error('Error fetching players:', err);
-    }
-  }
-
-  async function fetchVolunteers() {
-    try {
-      const q = query(collection(db, 'volunteers'), where('hostel_id', '==', hostelId));
-      const volunteersSnapshot = await getDocs(q);
-      const volunteersList = volunteersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Volunteer));
-      setVolunteers(volunteersList);
-    } catch (err) {
-      console.error('Error fetching volunteers:', err);
-    }
-  }
-
-  async function fetchRevenues() {
-    try {
-      const q = query(collection(db, 'revenues'), where('hostel_id', '==', hostelId));
-      const revenuesSnapshot = await getDocs(q);
-      const revenuesList = revenuesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Revenue));
-      setRevenues(revenuesList);
-    } catch (err) {
-      console.error('Error fetching revenues:', err);
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (!hostel) throw new Error('Hostel not found');
-      if (formData.hostel_password !== hostel.password) {
-        throw new Error('Invalid hostel password');
-      }
-
-      await addDoc(collection(db, 'teams'), {
-        hostel_id: hostelId,
-        sport: formData.sport,
-        captain_name: formData.captain_name,
-        team_size: parseInt(formData.team_size),
-        created_at: new Date()
-      });
-
-      setShowForm(false);
-      setFormData({
-        sport: 'VOLLEYBALL',
-        captain_name: '',
-        team_size: '',
-        hostel_password: ''
-      });
-      fetchTeams();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add team. Please try again.');
-      console.error('Error adding team:', err);
-    }
-  };
-
-  if (!hostel) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white">Loading...</div>
       </div>
     );
   }
 
-  if (!isVerified) {
+  if (!hostel) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="max-w-md w-full mx-auto p-6">
-          <h1 className="text-2xl font-bold text-center mb-8 bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent">
-            Access {hostel.name} Dashboard
-          </h1>
-          <form onSubmit={handleVerification} className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white">Hostel not found</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full space-y-8 bg-gray-800 p-8 rounded-xl shadow-lg">
+          <div className="text-center">
+            <div className="flex justify-center">
+              <Lock className="h-12 w-12 text-orange-500" />
+            </div>
+            <h2 className="mt-6 text-3xl font-bold text-white">{hostel.name}</h2>
+            <p className="mt-2 text-sm text-gray-400">Enter password to access dashboard</p>
+          </div>
+          
+          <form onSubmit={handlePasswordSubmit} className="mt-8 space-y-6">
             {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded mb-4">
+              <div className="bg-red-900/50 text-red-200 p-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Enter Hostel Password</label>
-                <input
-                  type="password"
-                  required
-                  value={verificationPassword}
-                  onChange={(e) => setVerificationPassword(e.target.value)}
-                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  placeholder="Enter password to access dashboard"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-700 transition-colors"
-              >
-                Access Dashboard
-              </button>
+            
+            <div>
+              <label htmlFor="password" className="sr-only">Password</label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full rounded-lg bg-gray-700 border-transparent focus:border-orange-500 focus:ring-orange-500 text-white"
+                placeholder="Enter dashboard password"
+              />
             </div>
+
+            <button
+              type="submit"
+              className="w-full flex justify-center py-3 px-4 rounded-lg text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 focus:ring-offset-gray-800"
+            >
+              Access Dashboard
+            </button>
           </form>
         </div>
       </div>
     );
   }
 
+  // Available sports that don't have teams yet
+  const availableSports = {
+    cricket: hostel.sports?.cricket && !teams.find(t => t.sport === 'cricket'),
+    volleyball: hostel.sports?.volleyball && !teams.find(t => t.sport === 'volleyball'),
+    kabaddi: hostel.sports?.kabaddi && !teams.find(t => t.sport === 'kabaddi')
+  };
+
+  const hasAvailableSports = Object.values(availableSports).some(Boolean);
+
+  const sportEmoji = {
+    cricket: '🏏',
+    volleyball: '🏐',
+    kabaddi: '🤼'
+  };
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto p-4">
-        <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent">
-          {hostel.name} Dashboard
-        </h1>
-
-        <div className="mb-6">
-          <nav className="flex space-x-4">
-            <TabButton active={activeTab === 'teams'} onClick={() => setActiveTab('teams')}>
-              Teams & Players
-            </TabButton>
-            <TabButton active={activeTab === 'volunteers'} onClick={() => setActiveTab('volunteers')}>
-              Volunteers
-            </TabButton>
-            <TabButton active={activeTab === 'revenue'} onClick={() => setActiveTab('revenue')}>
-              Revenue
-            </TabButton>
-          </nav>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      {/* Dashboard Header */}
+      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 mb-8 shadow-xl border border-gray-700">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-orange-500/20 p-3 rounded-xl">
+              <Trophy className="h-8 w-8 text-orange-500" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">{hostel.name}</h1>
+              <p className="text-gray-400">Sports Management Dashboard</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="bg-gray-700/50 px-4 py-2 rounded-lg flex items-center gap-2">
+              <Users className="h-5 w-5 text-gray-400" />
+              <span className="text-white font-medium">{teams.length} Teams</span>
+            </div>
+          </div>
         </div>
-
-        {activeTab === 'teams' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">Teams</h2>
-              <button
-                onClick={() => setShowForm(!showForm)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-700 transition-colors"
-              >
-                {showForm ? 'Cancel' : 'Add Team'}
-              </button>
-            </div>
-
-            {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded mb-4">
-                {error}
-              </div>
-            )}
-
-            {showForm && (
-              <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300">Sport</label>
-                    <select
-                      required
-                      value={formData.sport}
-                      onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    >
-                      <option value="VOLLEYBALL">Volleyball</option>
-                      <option value="KABADDI">Kabaddi</option>
-                      <option value="CRICKET">Cricket</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300">Captain Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.captain_name}
-                      onChange={(e) => setFormData({ ...formData, captain_name: e.target.value })}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300">Team Size</label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={formData.team_size}
-                      onChange={(e) => setFormData({ ...formData, team_size: e.target.value })}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300">Hostel Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={formData.hostel_password}
-                      onChange={(e) => setFormData({ ...formData, hostel_password: e.target.value })}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-700 transition-colors"
-                  >
-                    Add Team
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="space-y-6">
-              {teams.map((team) => (
-                <div key={team.id} className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">
-                        {team.name} - {team.sport}
-                      </h3>
-                      <div className="mt-2 space-y-1 text-gray-300">
-                        <p>Captain: {team.captain_name}</p>
-                        <p>Team Size: {team.team_size}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setSelectedTeam(team)}
-                      className="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-700 transition-colors"
-                    >
-                      Manage Players
-                    </button>
-                  </div>
-
-                  <div className="mt-4">
-                    <h4 className="font-medium text-gray-300 mb-2">Current Players</h4>
-                    <div className="space-y-2">
-                      {players
-                        .filter(player => player.team_id === team.id)
-                        .map(player => (
-                          <div key={player.id} className="bg-gray-700 rounded-lg p-4 flex justify-between items-center">
-                            <div className="flex items-center space-x-4">
-                              {player.profile_image && (
-                                <img
-                                  src={player.profile_image}
-                                  alt={player.name}
-                                  className="w-12 h-12 rounded-full object-cover"
-                                />
-                              )}
-                              <div>
-                                <p className="font-medium">{player.name}</p>
-                                <p className="text-sm text-gray-400">Position: {player.position}</p>
-                                <p className="text-sm text-gray-400">Roll Number: {player.roll_number}</p>
-                                <p className="text-sm text-gray-400">Status: {player.status}</p>
-                              </div>
-                            </div>
-                            {player.status === 'PENDING' && (
-                              <div className="flex space-x-2">
-                                <button
-                                  onClick={() => handlePlayerStatusUpdate(player.id, 'APPROVED')}
-                                  className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handlePlayerStatusUpdate(player.id, 'REJECTED')}
-                                  className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'volunteers' && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {volunteers.map((volunteer) => (
-              <div key={volunteer.id} className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-                <h3 className="text-xl font-semibold text-white">{volunteer.name}</h3>
-                <div className="mt-4 space-y-2 text-gray-300">
-                  <p>Role: {volunteer.role}</p>
-                  <p>Sport: {volunteer.assigned_sport}</p>
-                  <p>Contact: {volunteer.contact_number}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === 'revenue' && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {revenues.map((revenue) => (
-              <div key={revenue.id} className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-                <h3 className="text-xl font-semibold text-white">{revenue.event_name}</h3>
-                <div className="mt-4 space-y-2 text-gray-300">
-                  <p>Amount: ₹{revenue.amount.toLocaleString()}</p>
-                  <p>Type: {revenue.type}</p>
-                  <p>Date: {new Date(revenue.date).toLocaleDateString()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
+      {/* Create New Team Section */}
+      {hasAvailableSports && (
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 mb-8 shadow-xl border border-gray-700">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Plus className="h-6 w-6 text-orange-500" />
+              <h2 className="text-xl font-bold text-white">Create New Teams</h2>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Object.entries(availableSports).map(([sport, isAvailable]) => 
+              isAvailable && (
+                <button
+                  key={sport}
+                  onClick={() => setShowAddTeam(sport as any)}
+                  className="group relative bg-gradient-to-br from-orange-500 to-orange-700 p-6 rounded-xl hover:from-orange-600 hover:to-orange-800 transition-all duration-300 transform hover:-translate-y-1"
+                >
+                  <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 rounded-xl transition-opacity" />
+                  <div className="flex flex-col items-center text-center space-y-4">
+                    <div className="text-4xl mb-2">{sportEmoji[sport as keyof typeof sportEmoji]}</div>
+                    <span className="text-xl font-bold text-white capitalize">{sport} Team</span>
+                    <p className="text-white/80 text-sm">Create your {sport} team now</p>
+                  </div>
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Existing Teams Section */}
+      {teams.length > 0 && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Medal className="h-6 w-6 text-orange-500" />
+            <h2 className="text-xl font-bold text-white">Your Teams</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-6">
+            {teams.map((team) => (
+              <div key={team.id} className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 shadow-xl border border-gray-700">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-orange-500/20 p-3 rounded-xl">
+                      <Trophy className="h-8 w-8 text-orange-500" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{sportEmoji[team.sport]}</span>
+                        <h3 className="text-xl font-bold text-white capitalize">
+                          {team.sport} Team
+                        </h3>
+                      </div>
+                      <p className="text-gray-400">
+                        {team.players.length} / {team.maxPlayers} Players
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => exportTeamData(team)}
+                      className="flex items-center gap-2 bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <Download className="h-5 w-5" />
+                      <span>Export</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedTeam(team)}
+                      className="flex items-center gap-2 bg-orange-600 text-white px-6 py-2.5 rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                      <Edit className="h-5 w-5" />
+                      <span>Manage Team</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Team Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-700/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-gray-400" />
+                        <span className="text-gray-300">Players</span>
+                      </div>
+                      <span className="text-white font-semibold">{team.players.length}</span>
+                    </div>
+                  </div>
+                  <div className="bg-gray-700/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Activity className="h-5 w-5 text-gray-400" />
+                        <span className="text-gray-300">Matches</span>
+                      </div>
+                      <span className="text-white font-semibold">{team.matches}</span>
+                    </div>
+                  </div>
+                  <div className="bg-gray-700/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-gray-400" />
+                        <span className="text-gray-300">Wins</span>
+                      </div>
+                      <span className="text-white font-semibold">{team.wins}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Players Grid */}
+                {team.players.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="text-lg font-semibold text-white mb-4">Players</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {team.players.map((player) => (
+                        <div key={player.id} className="bg-gray-700/50 rounded-lg p-4 flex items-center gap-4">
+                          {player.photoUrl ? (
+                            <img
+                              src={player.photoUrl}
+                              alt={player.name}
+                              className="h-12 w-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-12 w-12 rounded-full bg-gray-600 flex items-center justify-center">
+                              <span className="text-xl text-gray-400">
+                                {player.name.charAt(0)}
+                              </span>
+                            </div>
+                          )}
+                          <div>
+                            <h5 className="text-white font-medium">{player.name}</h5>
+                            <p className="text-gray-400 text-sm">{player.role}</p>
+                            <p className="text-gray-400 text-sm">#{player.jerseyNumber}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No Teams Message */}
+      {teams.length === 0 && !hasAvailableSports && (
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-12 text-center shadow-xl border border-gray-700">
+          <Trophy className="h-16 w-16 text-orange-500 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-white mb-2">No Teams Available</h3>
+          <p className="text-gray-400">All possible teams have been created</p>
+        </div>
+      )}
+
+      {/* Modals */}
+      {showAddTeam && (
+        <AddTeam
+          hostelId={hostel.id}
+          sport={showAddTeam}
+          onClose={() => setShowAddTeam(null)}
+          onTeamCreated={handleTeamCreated}
+        />
+      )}
+
       {selectedTeam && (
-        <PlayerManagementModal
+        <TeamView
           team={selectedTeam}
           onClose={() => setSelectedTeam(null)}
-          onSuccess={() => {
-            fetchPlayers();
-            setSelectedTeam(null);
-          }}
+          onTeamUpdated={handleTeamUpdated}
         />
       )}
     </div>
-  );
-}
-
-function TabButton({ children, active, onClick }: { 
-  children: React.ReactNode; 
-  active: boolean; 
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 rounded-lg font-medium ${
-        active 
-          ? 'bg-indigo-600 text-white' 
-          : 'text-gray-300 hover:text-white hover:bg-gray-800'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
