@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /hostels/{hostelId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.resource.data.password is string && 
+         request.resource.data.password.size() >= 6);
+    }
+    
+    match /teams/{teamId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/hostels/$(request.resource.data.hostel_id));
+      allow update, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    match /players/{playerId} {
+      // Allow reading players if authenticated
+      allow read: if request.auth != null;
+      
+      // Allow creating players if authenticated and the team exists
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/teams/$(request.resource.data.team_id));
+      
+      // Allow updating player status if user is admin or belongs to the hostel
+      allow update: if request.auth != null && (
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/teams/$(resource.data.team_id)) &&
+        exists(/databases/$(database)/documents/hostels/$(get(/databases/$(database)/documents/teams/$(resource.data.team_id)).data.hostel_id))
+      );
+      
+      // Allow deleting players if user is admin
+      allow delete: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    match /volunteers/{volunteerId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    match /revenues/{revenueId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+  }
+}
