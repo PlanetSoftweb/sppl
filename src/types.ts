@@ -1,48 +1,27 @@
-export interface Hostel {
-  id: string;
-  name: string;
-  totalStudents: number;
-  password: string;
-  sports: {
-    cricket: boolean;
-    volleyball: boolean;
-    kabaddi: boolean;
-  };
-  volunteers: Volunteer[];
-  revenue: Revenue;
-}
+// Previous code remains the same...
 
-export interface SportTeam {
+export interface Match {
   id: string;
-  hostelId: string;
   sport: 'cricket' | 'volleyball' | 'kabaddi';
-  players: Player[];
-  captain: string;
-  matches: number;
-  wins: number;
-  maxPlayers: number;
-  registrationLink?: string;
+  team1Id: string;
+  team2Id: string;
+  team1Name: string;
+  team2Name: string;
+  date: string;
+  startTime: string;  // Renamed from time to startTime
+  endTime: string;    // Added end time
+  venue: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  winner?: string;
+  score?: {
+    team1: number;
+    team2: number;
+  };
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  round?: number;     // Added for league tracking
+  matchNumber?: number; // Added for league tracking
 }
 
-export interface Player {
-  id: string;
-  name: string;
-  role: string;
-  jerseyNumber: number;
-  photoUrl?: string;
-  mobileNumber: string;
-  tshirtSize: 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL';
-}
-
-export interface Volunteer {
-  id: string;
-  name: string;
-  role: string;
-  contact: string;
-}
-
-export interface Revenue {
-  totalCollected: number;
-  expenses: number;
-  lastUpdated: string;
-}
+// Rest of the types remain the same...

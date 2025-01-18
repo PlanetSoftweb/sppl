@@ -37,8 +37,13 @@ export default function AddTeam({ hostelId, sport, onClose, onTeamCreated }: Add
         throw new Error('Hostel not found');
       }
 
+      const hostelData = hostelDoc.data();
+      if (hostelData.userId !== user.uid) {
+        throw new Error('You do not have permission to add teams to this hostel');
+      }
+
       const teamData = {
-        hostel_id: hostelId, // Changed to match security rules
+        hostel_id: hostelId,
         sport,
         maxPlayers: parseInt(maxPlayers),
         players: [],

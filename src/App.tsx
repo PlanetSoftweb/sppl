@@ -9,7 +9,9 @@ import AddHostel from './components/AddHostel';
 import Login from './components/Login';
 import PlayerRegistration from './components/PlayerRegistration';
 import RegistrationSuccess from './components/RegistrationSuccess';
-import { Building2, Home, Trophy, LogOut, Menu, X } from 'lucide-react';
+import ExpenseManager from './components/ExpenseManager';
+import Matches from './components/Matches';
+import { Building2, Home, Trophy, LogOut, Menu, X, DollarSign, Calendar } from 'lucide-react';
 
 function AppContent() {
   const [user, setUser] = useState<any>(null);
@@ -86,6 +88,18 @@ function AppContent() {
                     Hostels
                   </span>
                 </Link>
+                <Link to="/matches" className="text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">
+                  <span className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Matches
+                  </span>
+                </Link>
+                <Link to="/expenses" className="text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">
+                  <span className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Budget
+                  </span>
+                </Link>
               </div>
             </div>
             
@@ -135,6 +149,24 @@ function AppContent() {
                   Hostels
                 </span>
               </Link>
+              <Link
+                to="/matches"
+                className="text-gray-300 hover:text-orange-500 block px-3 py-2 rounded-md text-base font-medium"
+              >
+                <span className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Matches
+                </span>
+              </Link>
+              <Link
+                to="/expenses"
+                className="text-gray-300 hover:text-orange-500 block px-3 py-2 rounded-md text-base font-medium"
+              >
+                <span className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Budget
+                </span>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="text-gray-300 hover:text-orange-500 block w-full text-left px-3 py-2 rounded-md text-base font-medium"
@@ -157,6 +189,8 @@ function AppContent() {
             <Route path="/hostels" element={<Hostels />} />
             <Route path="/hostel/:hostelId" element={<HostelDashboard />} />
             <Route path="/add-hostel" element={<AddHostel />} />
+            <Route path="/expenses" element={<ExpenseManager />} />
+            <Route path="/matches" element={<Matches />} />
             <Route path="/register/:linkId" element={<PlayerRegistration />} />
             <Route path="/registration-success" element={<RegistrationSuccess />} />
             <Route path="*" element={<Navigate to="/" replace />} />

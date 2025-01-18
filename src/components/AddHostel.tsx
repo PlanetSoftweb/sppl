@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { collection, addDoc, getFirestore } from 'firebase/firestore';
 import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { Shield } from 'lucide-react';
+import { Shield, Trophy } from 'lucide-react';
 
 export default function AddHostel() {
   const navigate = useNavigate();
